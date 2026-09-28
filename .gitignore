@@ -1,0 +1,15 @@
+node_modules/
+.vercel/
+.tanstack/
+
+.env
+.env.*
+!.env.example
+
+.grok/preview.log
+.node_modules.lock
+
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db

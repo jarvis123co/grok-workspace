@@ -1,0 +1,228 @@
+Build a desktop-style application called "Aesthetic Sample Analyzer".
+
+This is NOT an AI image generator and NOT a prompt extractor.
+
+Purpose:
+Analyze collections of visual reference images and discover the user's aesthetic preferences from structured visual attributes.
+
+Core principle:
+The AI must NOT decide whether an image is beautiful.
+The user supplies preference labels.
+The AI only extracts observable visual characteristics and helps compare patterns across samples.
+
+Sample labels:
+- Like
+- Neutral
+- Dislike
+- Core Reference
+
+Main sections:
+- Samples
+- Analysis
+- Patterns
+- Compare
+- Profile
+
+SAMPLES
+
+Allow users to upload multiple images.
+
+Display them in a dense visual library.
+
+Each image can be labeled:
+Like / Neutral / Dislike / Core Reference
+
+Allow:
+- tags
+- notes
+- filtering
+- sorting
+- deleting
+- changing preference labels
+
+ANALYSIS
+
+When an image is selected, analyze visible characteristics into a structured schema.
+
+Analyze categories such as:
+
+Subject:
+- number of subjects
+- framing
+- body visibility
+- pose
+- orientation
+
+Face:
+- overall face shape
+- facial proportions
+- cheek fullness
+- jawline shape
+- perceived visual maturity characteristics
+- feature prominence
+
+Hair:
+- length
+- shape
+- bangs
+- tied / loose
+- volume
+- texture
+
+Body silhouette:
+- apparent head-to-body proportion
+- shoulder / waist / hip relationship
+- limb visual proportions
+- overall silhouette
+
+Clothing:
+- garment categories
+- silhouette
+- materials
+- layering
+- ornament complexity
+
+Composition:
+- shot scale
+- subject position
+- negative space
+- symmetry
+- visual balance
+
+Camera:
+- viewpoint
+- perspective strength
+- apparent focal-length characteristics
+- depth of field
+
+Lighting:
+- soft / hard
+- direction
+- contrast
+- exposure characteristics
+- natural / artificial appearance
+
+Color:
+- saturation
+- temperature
+- dominant colors
+- contrast
+- tonal range
+
+Rendering / texture:
+- photographic
+- cinematic
+- film-like
+- digital
+- illustration
+- anime
+- painterly
+- realistic / stylized
+- surface texture
+
+Environment:
+- indoor / outdoor
+- visual complexity
+- architectural or natural context
+- period / retro characteristics when visually evident
+
+Mood:
+- calm
+- intimate
+- distant
+- dramatic
+- playful
+- melancholic
+- everyday-life
+- elegant
+- other observable visual mood descriptors
+
+Image-quality characteristics:
+- over-smoothing
+- excessive gloss
+- overexposure
+- artificial skin texture
+- anatomical problems
+- visual artifacts
+
+Every extracted attribute must include a confidence level.
+
+IMPORTANT:
+All AI-generated labels must be editable by the user.
+User corrections override AI analysis and must be used in later statistics.
+
+Do not infer personality, ethnicity, identity, profession, socioeconomic status, or other hidden personal traits.
+
+PATTERNS
+
+Analyze the entire sample library.
+
+Show:
+
+- Most frequent characteristics in Like samples
+- Most frequent characteristics in Dislike samples
+- Attributes that best distinguish Like from Dislike
+- Frequently co-occurring feature combinations
+- Rare but strongly preferred characteristics
+- Contradictory preferences
+- Outlier samples
+- Attributes with insufficient evidence
+
+Do not fabricate statistical certainty from small sample sizes.
+Clearly display sample counts.
+
+COMPARE
+
+Allow comparison of any two groups, for example:
+
+Like vs Dislike
+Core Reference vs Like
+Custom tag group A vs group B
+
+For every visual dimension, show:
+- frequency in group A
+- frequency in group B
+- difference
+- sample count
+- representative images
+
+PROFILE
+
+Generate an evolving aesthetic profile based on the analyzed samples.
+
+Separate:
+
+1. Strong evidence
+2. Moderate evidence
+3. Weak / uncertain tendencies
+4. Explicit dislikes
+5. Important feature combinations
+
+Provide two export formats:
+
+Human-readable Markdown profile
+
+and
+
+Structured JSON suitable for use by other AI systems.
+
+Do NOT generate image prompts in version 1.
+
+DESIGN
+
+Desktop-first.
+Dark interface.
+High information density.
+Avoid oversized cards.
+Image-library oriented.
+Resizable analysis panel.
+Fast filtering and comparison.
+Professional internal research-tool appearance rather than a consumer social app.
+
+DATA
+
+Persist the sample library, user labels, corrections, analysis results, and profile locally.
+
+Use the available Grok vision/model capabilities for real image analysis if accessible inside the Build environment.
+
+The primary goal of this prototype is to determine whether structured analysis across multiple visual samples can reliably reveal recurring aesthetic preferences.
