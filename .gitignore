@@ -1,5 +1,6 @@
 node_modules/
 .launcher/
+.asa-local.json
 .pnpm-store/
 screenshots/research-qa/failure.png
 .output/

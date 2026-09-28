@@ -1,0 +1,5 @@
+{
+  "provider": "glm",
+  "model": "glm-4.6v-flash",
+  "keyFile": "C:/private/glm-api-key"
+}

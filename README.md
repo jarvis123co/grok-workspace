@@ -43,9 +43,19 @@ The application does **not** decide whether an image is beautiful. You label eac
 
 - Node.js `^20.19.0` or `>=22.12.0`
 - npm
-- An `XAI_API_KEY` for live vision analysis
+- A GLM or xAI API key for live vision analysis
 
-The library, labels, manual edits, statistics, comparison tools, and exports work without an API key. Only automated image analysis requires xAI access.
+The library, labels, manual edits, statistics, comparison tools, and exports work without an API key. Only automated image analysis requires provider access.
+
+### GLM vision analysis
+
+Copy `.asa-local.example.json` to `.asa-local.json` and point `keyFile` at a plain-text file containing only your key (no extension is required). The default GLM model is `glm-4.6v-flash`, using the official `https://open.bigmodel.cn/api/paas/v4/chat/completions` endpoint. The key file stays outside the project and is read only on the server. `.asa-local.json` is Git-ignored; do not publish it or the key file.
+
+Alternatively set `ASA_VISION_PROVIDER=glm`, `GLM_API_KEY`, and optionally `ASA_VISION_MODEL`. For xAI select `ASA_VISION_PROVIDER=xai` and set `XAI_API_KEY`. Provider switching never automatically falls back to another provider's key. Existing analyses retain their original model identifiers.
+
+Analyze sends the selected image and the attribute schema to the configured provider. Notes and research quotes are not sent. Requests have a 120-second timeout and no automatic retries. Errors are sanitized; truncated responses are not stored. Model access, quota and billing depend on your provider account, not the local app.
+
+For an explicit live test using a synthetic color tile, run `node --experimental-strip-types scripts/vision-live-check.mjs --confirm-api-call` (requires Microsoft Edge). This makes one real API request; ordinary unit tests do not.
 
 ### Install and run
 
@@ -92,8 +102,8 @@ The development server listens on `0.0.0.0:8080`.
 
 - Images and working data are stored locally in the browser with IndexedDB under `aesthetic-sample-analyzer`.
 - Authentication and the shared database are disabled in the included application configuration.
-- An image is sent to the xAI API only when an analysis action is triggered.
-- `XAI_API_KEY` is read only by the server-side analysis function and is not exposed through a browser environment variable.
+- An image is sent to the selected GLM or xAI API only when an analysis action is triggered.
+- Credentials are read only by the server-side analysis function, from the configured environment variable or external key file. They are not exposed through browser environment variables.
 - Library export creates a local JSON backup containing the images and their associated metadata.
 - The server rejects analysis payloads larger than 1.8 MB as encoded image data.
 
@@ -116,7 +126,7 @@ Open a sample's analysis panel and expand **证据与审美画像 / Research evi
 
 The private research archive is a design reference only: its personal images, quotes and source documents are **not bundled or published**. Exported research files may contain sensitive notes and images; review them before sharing.
 
-Vision analysis currently uses `grok-4.5` with a constrained JSON schema. Each field stores:
+Vision analysis supports GLM (`glm-4.6v-flash` by default) or xAI (`grok-4.5` by default), with a constrained attribute schema. Each field stores:
 
 - the normalized value;
 - confidence: `high`, `medium`, `low`, or `not_visible`;
@@ -145,7 +155,7 @@ The UI is built with React 19, TanStack Start/Router, Tailwind CSS, Radix primit
 
 - The active library is local to one browser profile unless it is exported and imported elsewhere.
 - There is no account sync or multi-user collaboration in the included configuration.
-- Automated analysis depends on xAI API availability and the configured model.
+- Automated analysis depends on the selected provider's API availability and model permissions.
 - Statistical output describes correlations in the current labeled library; it is not a universal statement about the user's taste.
 - The application does not generate images or prompts.
 
