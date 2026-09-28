@@ -15,6 +15,7 @@ import {
   type Sample,
 } from "@/lib/asa/schema";
 import { collectTags, useLibrary } from "@/lib/asa/store";
+import { ResearchEditor } from "./research-editor";
 
 const CONFIDENCE_NAME: Record<Confidence, string> = {
   high: "High",
@@ -82,7 +83,7 @@ function SampleMeta({
         {sample.analysis ? ` · ${sample.analysis.model}` : " · not analyzed"}
         {sample.analysis ? ` · ${formatDistanceToNow(sample.analysis.analyzedAt, { addSuffix: true })}` : ""}
       </p>
-      <div className="mt-3 grid grid-cols-4 gap-1" role="group" aria-label="Preference label">
+      <div className="mt-3 grid grid-cols-3 gap-1" role="group" aria-label="Preference label">
         {LABELS.map((label) => (
           <button
             key={label.id}
@@ -171,7 +172,9 @@ function AttributeEditor({ sample }: { sample: Sample }) {
 
   if (!sample.analysis) {
     return (
-      <div className="flex flex-1 items-center p-4">
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <ResearchEditor sample={sample} />
+        <Button onClick={() => useLibrary.getState().startManual(sample.id)}>手动填写属性 / Start manual analysis</Button>
         <p className="text-sm text-muted">Not analyzed yet. Run Analyze to fill the schema. You can still label, tag, and note this sample.</p>
       </div>
     );
@@ -180,6 +183,7 @@ function AttributeEditor({ sample }: { sample: Sample }) {
   const analysis = sample.analysis;
   return (
     <div className="min-h-0 flex-1 overflow-auto px-3 pb-6">
+      <ResearchEditor sample={sample} />
       <label className="mt-3 block text-xs text-faint" htmlFor="jump-category">Jump to category</label>
       <select
         id="jump-category"

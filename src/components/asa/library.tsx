@@ -5,6 +5,7 @@ import { LABELS, labelName, type LabelId } from "@/lib/asa/schema";
 import { collectTags, useLibrary, visibleSamples, type AnalyzedFilter, type SortKey } from "@/lib/asa/store";
 
 export function LibraryPane() {
+  const ready = useLibrary((state) => state.ready);
   const samples = useLibrary((state) => state.samples);
   const query = useLibrary((state) => state.query);
   const labelFilter = useLibrary((state) => state.labelFilter);
@@ -31,6 +32,7 @@ export function LibraryPane() {
   const [dragOver, setDragOver] = useState(false);
 
   function takeFiles(files: FileList | File[] | null) {
+    if (!ready) return;
     if (!files) return;
     void addFiles([...files]);
   }
@@ -50,13 +52,14 @@ export function LibraryPane() {
       }}
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <Button tone="primary" onClick={() => inputRef.current?.click()}>
+        <Button tone="primary" disabled={!ready} onClick={() => inputRef.current?.click()}>
           <ImagePlus className="size-4" aria-hidden="true" />
           Upload
         </Button>
         <input
           ref={inputRef}
           type="file"
+          disabled={!ready}
           accept="image/*"
           multiple
           className="sr-only"

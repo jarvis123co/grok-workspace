@@ -9,7 +9,7 @@ The application does **not** decide whether an image is beautiful. You label eac
 ## What it does
 
 - Imports multiple reference images into a dense, filterable sample library.
-- Assigns one of four user-controlled labels: **Like**, **Neutral**, **Dislike**, or **Core Reference**.
+- Starts samples as **Unrated**, then accepts **Like**, **Neutral**, **Dislike**, or **Core Reference**, with optional scoped judgments.
 - Stores tags and notes alongside each image.
 - Extracts visible traits for subject, face, hair, silhouette, clothing, composition, camera, lighting, color, rendering, environment, mood, and image quality.
 - Records a confidence level for every extracted attribute.
@@ -25,17 +25,17 @@ The application does **not** decide whether an image is beautiful. You label eac
 2. **Corrections outrank automation.** Every generated value is editable and corrected data is used in later statistics.
 3. **Small samples stay uncertain.** The UI displays sample counts and deliberately avoids strong claims when evidence is sparse.
 4. **Only visible traits are analyzed.** The schema excludes identity, ethnicity, personality, profession, socioeconomic status, and other hidden personal characteristics.
-5. **No prompt generation in version 1.** This is an analysis tool, not an image generator or prompt extractor.
+5. **No prompt generation.** This is an analysis tool, not an image generator or prompt extractor.
 
 ## Main views
 
 | View | Purpose |
 | --- | --- |
 | **Samples** | Upload, label, tag, annotate, filter, sort, and remove reference images. |
-| **Analysis** | Review model observations and edit individual attributes and confidence levels. |
+| **Analysis** | Edit attributes; record scoped judgments, quotes, provenance, conditional routes and image-pair comparisons. |
 | **Patterns** | Explore recurring traits, distinctions, combinations, contradictions, outliers, and evidence gaps. |
 | **Compare** | Compare any two preference or tag groups across visual dimensions. |
-| **Profile** | Review strong, moderate, and weak tendencies; explicit dislikes; important combinations; and exports. |
+| **Profile** | Review descriptive tendencies, inferred dislike associations, direct research records, combinations and exports. |
 
 ## Getting started
 
@@ -52,6 +52,8 @@ The library, labels, manual edits, statistics, comparison tools, and exports wor
 ```bash
 npm ci
 ```
+
+Alternatively, the included `pnpm-lock.yaml` records the dependency set used for the research-workflow checks: `pnpm install --frozen-lockfile`.
 
 Set the API key in the server process environment. Do not commit it to the repository.
 
@@ -95,6 +97,23 @@ The development server listens on `0.0.0.0:8080`.
 
 ## Analysis and evidence model
 
+### Research workflow / 审美画像工作流
+
+Open a sample's analysis panel and expand **证据与审美画像 / Research evidence**. No API key is needed for manual annotation.
+
+- New samples start **Unrated**, distinct from Neutral. Older labels are preserved.
+- Record whole-image, category or individual-field judgments. Specific judgments override broad labels; any matching exclusion wins. Only the latest judgment at the same scope is active; earlier records remain visible.
+- Keep verbatim user quotes, interpretations, source references and dates separate. Inferred statistical associations are never called explicit dislikes.
+- Track subject aliases, visible state and evidence clusters manually. A known cluster contributes at most one vote per attribute value; otherwise a subject alias is used. Ungrouped images are not proven independent. Multiple values/states may coexist within a cluster.
+- Mark limited, invalid or excluded evidence without deleting it. These records are omitted from statistical pools. Missing/low-confidence traits do not enter a field's denominator.
+- Add conditional preference routes, boundaries, counterexamples and a manually assigned hypothesis status. These records do not automatically become verified findings.
+- Compare two actual samples with A/B/tie/neither/unrated outcomes and a scoped quote. Pair judgments stay separate from whole-image labels.
+- Portrait fields cover visible facial spacing/expression, frame versus soft contour, apparent chest/hip shape, segmented legs/feet and hosiery. These are visual descriptions, not body measurements or identity inference.
+- Profile Markdown/JSON includes research records; full library backup additionally includes images. Library import accepts older exports and remaps pair references when IDs collide. Missing comparison targets are visibly marked.
+- Large-screen typography increases at 2560px and 3600px widths, including 3840×2160. Browser zoom remains available.
+
+The private research archive is a design reference only: its personal images, quotes and source documents are **not bundled or published**. Exported research files may contain sensitive notes and images; review them before sharing.
+
 Vision analysis currently uses `grok-4.5` with a constrained JSON schema. Each field stores:
 
 - the normalized value;
@@ -126,7 +145,7 @@ The UI is built with React 19, TanStack Start/Router, Tailwind CSS, Radix primit
 - There is no account sync or multi-user collaboration in the included configuration.
 - Automated analysis depends on xAI API availability and the configured model.
 - Statistical output describes correlations in the current labeled library; it is not a universal statement about the user's taste.
-- Version 1 intentionally does not generate images or prompts.
+- The application does not generate images or prompts.
 
 ## Additional screenshots
 

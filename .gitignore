@@ -1,4 +1,8 @@
 node_modules/
+.pnpm-store/
+screenshots/research-qa/failure.png
+.output/
+dist/
 .vercel/
 .tanstack/
 

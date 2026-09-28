@@ -1,9 +1,11 @@
 import { isLabelId, sanitizeAnalysis, type Analysis, type LabelId } from "./schema";
+import { sanitizeResearch, type Research } from "./research";
 
 const DB_NAME = "aesthetic-sample-analyzer";
 const STORE = "samples";
 
 export type PersistedSample = {
+  research?: Research;
   id: string;
   fileName: string;
   width: number;
@@ -34,10 +36,15 @@ function sanitizeRow(value: unknown): PersistedSample | null {
   const row = value as Record<string, unknown>;
   if (typeof row.id !== "string" || !(row.image instanceof Blob)) return null;
   const label = typeof row.label === "string" && isLabelId(row.label) ? row.label : "neutral";
-  const tags = Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 24) : [];
+  const tags = Array.isArray(row.tags)
+    ? row.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 24)
+    : [];
   return {
     id: row.id,
-    fileName: typeof row.fileName === "string" && row.fileName.trim() ? row.fileName.slice(0, 180) : "untitled",
+    fileName:
+      typeof row.fileName === "string" && row.fileName.trim()
+        ? row.fileName.slice(0, 180)
+        : "untitled",
     width: typeof row.width === "number" ? row.width : 0,
     height: typeof row.height === "number" ? row.height : 0,
     bytes: typeof row.bytes === "number" ? row.bytes : row.image.size,
@@ -46,6 +53,7 @@ function sanitizeRow(value: unknown): PersistedSample | null {
     tags: tags.map((tag) => tag.trim()).filter(Boolean),
     notes: typeof row.notes === "string" ? row.notes.slice(0, 4000) : "",
     analysis: sanitizeAnalysis(row.analysis),
+    research: sanitizeResearch(row.research),
     image: row.image,
   };
 }
@@ -65,17 +73,31 @@ export async function loadAll(): Promise<PersistedSample[]> {
 export async function putSample(sample: PersistedSample): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE, "readwrite").objectStore(STORE).put(sample);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error("Could not save this sample."));
+    const transaction = db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).put(sample);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onabort = () => {
+      db.close();
+      reject(transaction.error ?? new Error("Could not save this sample."));
+    };
   });
 }
 
 export async function deleteSample(id: string): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE, "readwrite").objectStore(STORE).delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error("Could not delete this sample."));
+    const transaction = db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).delete(id);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onabort = () => {
+      db.close();
+      reject(transaction.error ?? new Error("Could not delete this sample."));
+    };
   });
 }

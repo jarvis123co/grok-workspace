@@ -21,15 +21,15 @@ export function PatternsView() {
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-faint tabular-nums">
         <span>Samples {report.counts.total}</span>
         <span>Analyzed {report.counts.analyzed}</span>
-        <span>Like {report.counts.likeAnalyzed}/{report.counts.like}</span>
-        <span>Dislike {report.counts.dislikeAnalyzed}/{report.counts.dislike}</span>
-        <span>Core {report.counts.coreAnalyzed}/{report.counts.core}</span>
+        <span>Like: {report.counts.like} whole-image / {report.counts.likeAnalyzed} scoped analyses</span>
+        <span>Dislike: {report.counts.dislike} whole-image / {report.counts.dislikeAnalyzed} scoped analyses</span>
+        <span>Core: {report.counts.core} whole-image / {report.counts.coreAnalyzed} scoped analyses</span>
         <span>Neutral {report.counts.neutralAnalyzed}/{report.counts.neutral}</span>
         <span>Corrections {report.counts.edits}</span>
       </div>
       {report.caution ? <Caution>{report.caution}</Caution> : null}
       <p className="mt-3 text-xs text-faint">
-        Frequencies use high and medium confidence only. Not-visible traits are excluded from the denominator. These are counts, not significance tests.
+        Frequencies count evidence groups, not repeated photos. High and medium confidence only; scoped exclusions and limited/invalid evidence are omitted. Ungrouped images are not proven independent. These are descriptive counts, not significance tests.
       </p>
       <Panel title="Most frequent in Like" meta={`${report.counts.likeAnalyzed} analyzed`}>
         <FreqList rows={report.likeTop} empty="No analyzed likes yet." />
@@ -131,7 +131,7 @@ export function PatternsView() {
   );
 }
 
-function cnLabel(label: "like" | "neutral" | "dislike" | "core") {
+function cnLabel(label: import("@/lib/asa/schema").LabelId) {
   return `text-xs ${labelClass(label)}`;
 }
 

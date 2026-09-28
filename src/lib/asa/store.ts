@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { sanitizeResearch, type Research } from "./research";
 import { analyzeSampleImage } from "./analyze";
 import { dataUrlToBlob, fileToStoredBlob, blobToAnalysisDataUrl, blobToDataUrl } from "./image";
 import { downloadText, stampName } from "./download";
@@ -22,6 +23,8 @@ export type AnalyzedFilter = "all" | "analyzed" | "pending";
 type Batch = { running: boolean; done: number; total: number };
 
 type LibraryState = {
+  setResearch: (id: string, research: Research) => void;
+  startManual: (id: string) => void;
   ready: boolean;
   loadError: string | null;
   samples: Sample[];
@@ -63,7 +66,7 @@ type LibraryState = {
 
 const blobs = new Map<string, Blob>();
 const writeChain = new Map<string, Promise<void>>();
-const labelRank: Record<LabelId, number> = { core: 0, like: 1, neutral: 2, dislike: 3 };
+const labelRank: Record<LabelId, number> = { core: 0, like: 1, neutral: 2, dislike: 3, unrated: 4 };
 const BATCH_CAP = 8;
 
 function toSample(row: PersistedSample): Sample {
@@ -86,6 +89,7 @@ function persist(sample: Sample) {
     tags: sample.tags,
     notes: sample.notes,
     analysis: sample.analysis,
+    research: sample.research,
     image: blob,
   };
   const prev = writeChain.get(sample.id) ?? Promise.resolve();
@@ -98,20 +102,33 @@ function persist(sample: Sample) {
   writeChain.set(sample.id, next);
 }
 
-export function visibleSamples(samples: Sample[], ui: Pick<LibraryState, "query" | "labelFilter" | "analyzedFilter" | "tagFilter" | "sort">): Sample[] {
+export function visibleSamples(
+  samples: Sample[],
+  ui: Pick<LibraryState, "query" | "labelFilter" | "analyzedFilter" | "tagFilter" | "sort">,
+): Sample[] {
   const query = ui.query.trim().toLowerCase();
   const list = samples.filter((sample) => {
     if (ui.labelFilter !== "all" && sample.label !== ui.labelFilter) return false;
     if (ui.analyzedFilter === "analyzed" && !sample.analysis) return false;
     if (ui.analyzedFilter === "pending" && sample.analysis) return false;
-    if (ui.tagFilter && !sample.tags.some((tag) => tag.toLowerCase() === ui.tagFilter.toLowerCase())) return false;
+    if (
+      ui.tagFilter &&
+      !sample.tags.some((tag) => tag.toLowerCase() === ui.tagFilter.toLowerCase())
+    )
+      return false;
     if (!query) return true;
     const fieldText = sample.analysis
       ? Object.values(sample.analysis.fields)
           .map((field) => field.value)
           .join(" ")
       : "";
-    const haystack = [sample.fileName, sample.notes, sample.tags.join(" "), sample.analysis?.observations ?? "", fieldText]
+    const haystack = [
+      sample.fileName,
+      sample.notes,
+      sample.tags.join(" "),
+      sample.analysis?.observations ?? "",
+      fieldText,
+    ]
       .join(" ")
       .toLowerCase();
     return haystack.includes(query);
@@ -119,7 +136,8 @@ export function visibleSamples(samples: Sample[], ui: Pick<LibraryState, "query"
   return list.sort((a, b) => {
     if (ui.sort === "oldest") return a.createdAt - b.createdAt;
     if (ui.sort === "name") return a.fileName.localeCompare(b.fileName);
-    if (ui.sort === "label") return labelRank[a.label] - labelRank[b.label] || b.createdAt - a.createdAt;
+    if (ui.sort === "label")
+      return labelRank[a.label] - labelRank[b.label] || b.createdAt - a.createdAt;
     return b.createdAt - a.createdAt;
   });
 }
@@ -136,6 +154,13 @@ export function collectTags(samples: Sample[]): string[] {
 }
 
 export const useLibrary = create<LibraryState>((set, get) => ({
+  setResearch: (id, research) =>
+    patch(set, id, (sample) => ({ ...sample, research: sanitizeResearch(research) })),
+  startManual: (id) =>
+    patch(set, id, (sample) => ({
+      ...sample,
+      analysis: sample.analysis ?? { ...blankAnalysis("manual"), analyzedAt: Date.now() },
+    })),
   ready: false,
   loadError: null,
   samples: [],
@@ -155,9 +180,17 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     try {
       const rows = await loadAll();
       const samples = rows.map(toSample).sort((a, b) => b.createdAt - a.createdAt);
-      set({ samples, ready: true, loadError: null, selectedId: get().selectedId ?? samples[0]?.id ?? null });
+      set({
+        samples,
+        ready: true,
+        loadError: null,
+        selectedId: get().selectedId ?? samples[0]?.id ?? null,
+      });
     } catch (error) {
-      set({ ready: true, loadError: error instanceof Error ? error.message : "Could not open the library." });
+      set({
+        ready: true,
+        loadError: error instanceof Error ? error.message : "Could not open the library.",
+      });
     }
   },
 
@@ -187,7 +220,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
           height: stored.height,
           bytes: stored.blob.size,
           createdAt: Date.now(),
-          label: "neutral",
+          label: "unrated",
           tags: [],
           notes: "",
           analysis: null,
@@ -251,7 +284,10 @@ export const useLibrary = create<LibraryState>((set, get) => ({
           ...sample.analysis,
           fields: {
             ...sample.analysis.fields,
-            [key]: touchField(current, { value: current.aiValue, confidence: current.aiConfidence }),
+            [key]: touchField(current, {
+              value: current.aiValue,
+              confidence: current.aiConfidence,
+            }),
           },
         },
       };
@@ -263,7 +299,11 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       const text = observations.slice(0, 500);
       return {
         ...sample,
-        analysis: { ...sample.analysis, observations: text, observationsEdited: text !== sample.analysis.aiObservations },
+        analysis: {
+          ...sample.analysis,
+          observations: text,
+          observationsEdited: text !== sample.analysis.aiObservations,
+        },
       };
     }),
 
@@ -272,11 +312,16 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       if (!sample.analysis) return sample;
       return {
         ...sample,
-        analysis: { ...sample.analysis, observations: sample.analysis.aiObservations, observationsEdited: false },
+        analysis: {
+          ...sample.analysis,
+          observations: sample.analysis.aiObservations,
+          observationsEdited: false,
+        },
       };
     }),
 
   remove: async (id) => {
+    await writeChain.get(id);
     const sample = get().samples.find((item) => item.id === id);
     if (sample) URL.revokeObjectURL(sample.url);
     blobs.delete(id);
@@ -299,7 +344,9 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     try {
       await runAnalysis(set, get, id);
       const name = get().samples.find((sample) => sample.id === id)?.fileName ?? "sample";
-      set({ status: `Analysis stored for ${name}. Correct anything that is wrong — edits override the model.` });
+      set({
+        status: `Analysis stored for ${name}. Correct anything that is wrong — edits override the model.`,
+      });
     } catch (error) {
       set({ status: error instanceof Error ? error.message : "Analysis failed." });
     } finally {
@@ -309,12 +356,18 @@ export const useLibrary = create<LibraryState>((set, get) => ({
 
   analyzeUnanalyzed: async () => {
     if (get().batch.running || get().analyzingId) return;
-    const pending = get().samples.filter((sample) => !sample.analysis).slice(0, BATCH_CAP);
+    const pending = get()
+      .samples.filter((sample) => !sample.analysis)
+      .slice(0, BATCH_CAP);
     if (pending.length === 0) {
       set({ status: "Every sample already has an analysis." });
       return;
     }
-    set({ batch: { running: true, done: 0, total: pending.length }, batchCancel: false, status: null });
+    set({
+      batch: { running: true, done: 0, total: pending.length },
+      batchCancel: false,
+      status: null,
+    });
     for (let index = 0; index < pending.length; index += 1) {
       if (get().batchCancel) {
         set({ status: `Stopped after ${index} sample${index === 1 ? "" : "s"}.` });
@@ -342,7 +395,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     const samples = get().samples;
     const payload = {
       format: "aesthetic-sample-analyzer.library",
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       samples: await Promise.all(
         samples.map(async (sample) => {
@@ -352,7 +405,11 @@ export const useLibrary = create<LibraryState>((set, get) => ({
         }),
       ),
     };
-    downloadText(stampName("aesthetic-library", "json"), JSON.stringify(payload), "application/json");
+    downloadText(
+      stampName("aesthetic-library", "json"),
+      JSON.stringify(payload),
+      "application/json",
+    );
     set({ status: `Exported ${samples.length} sample${samples.length === 1 ? "" : "s"}.` });
   },
 
@@ -364,16 +421,30 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       set({ status: "That file is not valid JSON." });
       return;
     }
-    if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { samples?: unknown }).samples)) {
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !Array.isArray((parsed as { samples?: unknown }).samples)
+    ) {
       set({ status: "That file is not an analyzer library." });
       return;
     }
+    const header = parsed as { format?: unknown; version?: unknown };
+    if (
+      (header.format !== undefined && header.format !== "aesthetic-sample-analyzer.library") ||
+      (header.version !== undefined && header.version !== 1 && header.version !== 2)
+    ) {
+      set({ status: "Unsupported library format. Nothing imported." });
+      return;
+    }
     const existing = new Set(get().samples.map((sample) => sample.id));
+    const remap = new Map<string, string>();
     const incoming: Sample[] = [];
     for (const item of (parsed as { samples: unknown[] }).samples) {
       if (!item || typeof item !== "object") continue;
       const row = item as Record<string, unknown>;
-      if (typeof row.imageDataUrl !== "string" || !row.imageDataUrl.startsWith("data:image/")) continue;
+      if (typeof row.imageDataUrl !== "string" || !row.imageDataUrl.startsWith("data:image/"))
+        continue;
       const id = typeof row.id === "string" && !existing.has(row.id) ? row.id : crypto.randomUUID();
       if (existing.has(id)) continue;
       existing.add(id);
@@ -387,17 +458,29 @@ export const useLibrary = create<LibraryState>((set, get) => ({
           bytes: image.size,
           createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
           label: typeof row.label === "string" && isLabelId(row.label) ? row.label : "neutral",
-          tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 24) : [],
+          tags: Array.isArray(row.tags)
+            ? row.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 24)
+            : [],
           notes: typeof row.notes === "string" ? row.notes.slice(0, 4000) : "",
           analysis: sanitizeAnalysis(row.analysis),
+          research: sanitizeResearch(row.research),
           url: URL.createObjectURL(image),
         };
         blobs.set(id, image);
         persist(sample);
         incoming.push(sample);
+        if (typeof row.id === "string") remap.set(row.id, id);
       } catch {
         continue;
       }
+    }
+    for (const sample of incoming) {
+      if (sample.research)
+        sample.research.pairs = sample.research.pairs.map((pair) => ({
+          ...pair,
+          otherId: remap.get(pair.otherId) ?? pair.otherId,
+        }));
+      persist(sample);
     }
     if (incoming.length === 0) {
       set({ status: "Nothing new to import." });
@@ -411,7 +494,11 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   },
 }));
 
-function patch(set: (fn: (state: LibraryState) => Partial<LibraryState>) => void, id: string, recipe: (sample: Sample) => Sample) {
+function patch(
+  set: (fn: (state: LibraryState) => Partial<LibraryState>) => void,
+  id: string,
+  recipe: (sample: Sample) => Sample,
+) {
   let nextSample: Sample | null = null;
   set((state) => {
     const samples = state.samples.map((sample) => {
@@ -436,9 +523,19 @@ async function runAnalysis(
   if (!result.ok) throw new Error(result.error);
   const current = get().samples.find((sample) => sample.id === id);
   if (!current) return;
-  const analysis: Analysis = mergeModelAnalysis(current.analysis, result.model, result.observations, result.attributes);
-  const kept = Object.values(analysis.fields).filter((field) => field.edited).length + (analysis.observationsEdited ? 1 : 0);
-  patch(set as (fn: (state: LibraryState) => Partial<LibraryState>) => void, id, (sample) => ({ ...sample, analysis }));
+  const analysis: Analysis = mergeModelAnalysis(
+    current.analysis,
+    result.model,
+    result.observations,
+    result.attributes,
+  );
+  const kept =
+    Object.values(analysis.fields).filter((field) => field.edited).length +
+    (analysis.observationsEdited ? 1 : 0);
+  patch(set as (fn: (state: LibraryState) => Partial<LibraryState>) => void, id, (sample) => ({
+    ...sample,
+    analysis,
+  }));
   if (kept > 0) {
     set({ status: `Re-analyzed. Kept ${kept} of your correction${kept === 1 ? "" : "s"}.` });
   }

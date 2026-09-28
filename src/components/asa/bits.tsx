@@ -20,6 +20,7 @@ export function useViewport() {
 }
 
 const LABEL_CLASS: Record<LabelId, string> = {
+  unrated: "text-faint",
   like: "text-like",
   neutral: "text-muted",
   dislike: "text-dislike",

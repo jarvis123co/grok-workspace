@@ -7,7 +7,8 @@ import {
   type Sample,
   labelName,
   statTokens,
-} from "./schema";
+} from "./schema.ts";
+import { evidencePool, unitId } from "./research.ts";
 
 export type Evidence = "insufficient" | "anecdotal" | "limited" | "usable";
 
@@ -70,6 +71,14 @@ export type ProfileItem = {
 };
 
 export type Report = {
+  research: {
+    rawImages: number;
+    evidenceUnits: number;
+    ungrouped: number;
+    unrated: number;
+    excludedOrLimited: number;
+    records: { sampleId: string; fileName: string; research: Sample["research"] }[];
+  };
   counts: {
     total: number;
     analyzed: number;
@@ -104,9 +113,7 @@ export type Report = {
 };
 
 export type GroupSpec =
-  | { kind: "label"; label: LabelId }
-  | { kind: "tag"; tag: string }
-  | { kind: "analyzed" };
+  { kind: "label"; label: LabelId } | { kind: "tag"; tag: string } | { kind: "analyzed" };
 
 export type CompareRow = {
   key: string;
@@ -161,13 +168,19 @@ function traitLabel(key: string, value: string): string {
 function coverage(samples: Sample[], spec: FieldSpec): { covered: Sample[]; bag: ValueBag } {
   const covered: Sample[] = [];
   const bag: ValueBag = new Map();
+  const units = new Set<string>();
+  const votes = new Set<string>();
   for (const sample of samples) {
     const tokens = statTokens(spec, sample.analysis?.fields[spec.key]);
     if (tokens.length === 0) continue;
-    covered.push(sample);
+    const unit = unitId(sample);
+    if (!units.has(unit)) covered.push(sample);
+    units.add(unit);
     for (const value of tokens) {
       const row = bag.get(value) ?? { value, count: 0, sampleIds: [] };
-      row.count += 1;
+      const vote = JSON.stringify([unit, value]);
+      if (!votes.has(vote)) row.count += 1;
+      votes.add(vote);
       row.sampleIds.push(sample.id);
       bag.set(value, row);
     }
@@ -193,7 +206,12 @@ function topRows(samples: Sample[], limit: number): FreqRow[] {
     }
   }
   return rows
-    .sort((a, b) => b.count - a.count || b.count / b.covered - a.count / a.covered || a.fieldLabel.localeCompare(b.fieldLabel))
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        b.count / b.covered - a.count / a.covered ||
+        a.fieldLabel.localeCompare(b.fieldLabel),
+    )
     .slice(0, limit);
 }
 
@@ -218,21 +236,28 @@ function featureSet(sample: Sample): Map<string, string> {
 
 function combinations(samples: Sample[], limit: number): ComboRow[] {
   const pool = analyzed(samples);
-  const counts = new Map<string, { left: string; right: string; count: number; sampleIds: string[] }>();
+  const votes = new Set<string>();
+  const counts = new Map<
+    string,
+    { left: string; right: string; count: number; sampleIds: string[] }
+  >();
   for (const sample of pool) {
     const features: string[] = [];
     for (const spec of FIELDS) {
       for (const token of statTokens(spec, sample.analysis?.fields[spec.key])) {
-        if (features.length < 24) features.push(`${spec.key}=${token}`);
+        features.push(`${spec.key}=${token}`);
       }
     }
     const unique = [...new Set(features)];
     for (let i = 0; i < unique.length; i += 1) {
       for (let j = i + 1; j < unique.length; j += 1) {
         const [left, right] = [unique[i], unique[j]].sort();
+        if (left.split("=")[0] === right.split("=")[0]) continue;
         const id = `${left} + ${right}`;
         const row = counts.get(id) ?? { left, right, count: 0, sampleIds: [] };
-        row.count += 1;
+        const vote = JSON.stringify([unitId(sample), id]);
+        if (!votes.has(vote)) row.count += 1;
+        votes.add(vote);
         row.sampleIds.push(sample.id);
         counts.set(id, row);
       }
@@ -248,9 +273,23 @@ function combinations(samples: Sample[], limit: number): ComboRow[] {
       leftLabel: prettyFeature(row.left),
       rightLabel: prettyFeature(row.right),
       count: row.count,
-      covered: pool.length,
+      covered: new Set(
+        pool
+          .filter(
+            (s) =>
+              statTokens(
+                FIELD_BY_KEY[row.left.split("=")[0]],
+                s.analysis?.fields[row.left.split("=")[0]],
+              ).length &&
+              statTokens(
+                FIELD_BY_KEY[row.right.split("=")[0]],
+                s.analysis?.fields[row.right.split("=")[0]],
+              ).length,
+          )
+          .map(unitId),
+      ).size,
       sampleIds: row.sampleIds,
-      evidence: evidenceFor(pool.length),
+      evidence: evidenceFor(row.count),
     }));
 }
 
@@ -275,10 +314,10 @@ export function buildReport(samples: Sample[]): Report {
   const dislikes = byLabel(samples, "dislike");
   const cores = byLabel(samples, "core");
   const neutrals = byLabel(samples, "neutral");
-  const likeAnalyzed = analyzed(likes);
-  const dislikeAnalyzed = analyzed(dislikes);
-  const coreAnalyzed = analyzed(cores);
-  const preferred = [...likeAnalyzed, ...coreAnalyzed];
+  const likeAnalyzed = evidencePool(samples, ["like"]);
+  const dislikeAnalyzed = evidencePool(samples, ["dislike"]);
+  const coreAnalyzed = evidencePool(samples, ["core"]);
+  const preferred = evidencePool(samples, ["like", "core"]);
   const counts = {
     total: samples.length,
     analyzed: analyzed(samples).length,
@@ -296,7 +335,11 @@ export function buildReport(samples: Sample[]): Report {
 
   let caution: string | null = null;
   if (counts.analyzed === 0) {
-    caution = "No analyses yet. Patterns use your labels plus corrected attributes. Nothing here is a beauty score.";
+    caution =
+      "No analyses yet. Patterns use your labels plus corrected attributes. Nothing here is a beauty score.";
+  } else if (dislikeAnalyzed.length === 0 && preferred.length > 0) {
+    caution =
+      "Positive-only library: recurring traits describe your positive references, not what you dislike. Negative boundaries and Like–Dislike separation are untested; negative samples are optional.";
   } else if (likeAnalyzed.length < 8 || dislikeAnalyzed.length < 8) {
     caution = `Like has ${likeAnalyzed.length} analyzed sample${likeAnalyzed.length === 1 ? "" : "s"} and Dislike has ${dislikeAnalyzed.length}. Below 8 per group, treat every percentage as a hint, not a stable finding.`;
   }
@@ -305,22 +348,39 @@ export function buildReport(samples: Sample[]): Report {
   const contradictions = buildContradictions(likeAnalyzed, dislikeAnalyzed, distinctions);
   const outliers = buildOutliers(likeAnalyzed, dislikeAnalyzed);
   const insufficient = FIELDS.map((spec) => {
-    const seen = coverage(analyzed(samples), spec).covered.length;
+    const seen = coverage(evidencePool(samples), spec).covered.length;
     return { key: spec.key, category: spec.category, fieldLabel: spec.label, covered: seen };
   }).filter((row) => row.covered < 3);
 
   return {
+    research: {
+      rawImages: samples.length,
+      evidenceUnits: new Set(evidencePool(samples).map(unitId)).size,
+      ungrouped: samples.filter((s) => !s.research?.cluster && !s.research?.subject).length,
+      unrated: samples.filter((s) => s.label === "unrated").length,
+      excludedOrLimited: samples.filter(
+        (s) => s.research && (!s.research.included || s.research.validity !== "valid"),
+      ).length,
+      records: samples
+        .filter((s) => s.research)
+        .map((s) => ({ sampleId: s.id, fileName: s.fileName, research: s.research })),
+    },
     counts,
     caution,
     likeTop: topRows(likeAnalyzed, 12),
     dislikeTop: topRows(dislikeAnalyzed, 12),
     distinctions,
     combinations: combinations(likeAnalyzed, 8),
-    rarePreferred: rarePreferred(likeAnalyzed, dislikeAnalyzed, analyzed(samples)),
+    rarePreferred: rarePreferred(likeAnalyzed, dislikeAnalyzed, evidencePool(samples)),
     contradictions,
     outliers,
     insufficient,
-    profile: buildProfile(preferred, dislikeAnalyzed, coreAnalyzed, counts.preferredAnalyzed),
+    profile: buildProfile(
+      preferred,
+      dislikeAnalyzed,
+      coreAnalyzed,
+      new Set(preferred.map(unitId)).size,
+    ),
   };
 }
 
@@ -371,7 +431,9 @@ function rarePreferred(likes: Sample[], dislikes: Sample[], all: Sample[]): Freq
     for (const row of like.bag.values()) {
       const likeRate = row.count / like.covered.length;
       const overallRate = (overall.bag.get(row.value)?.count ?? 0) / overall.covered.length;
-      const dislikeRate = dislike.covered.length ? (dislike.bag.get(row.value)?.count ?? 0) / dislike.covered.length : 0;
+      const dislikeRate = dislike.covered.length
+        ? (dislike.bag.get(row.value)?.count ?? 0) / dislike.covered.length
+        : 0;
       if (row.count < 2 || likeRate < 0.5 || overallRate >= 0.3 || dislikeRate > 0.15) continue;
       rows.push({
         key: spec.key,
@@ -387,7 +449,11 @@ function rarePreferred(likes: Sample[], dislikes: Sample[], all: Sample[]): Freq
   return rows.sort((a, b) => b.count / b.covered - a.count / a.covered).slice(0, 8);
 }
 
-function buildContradictions(likes: Sample[], dislikes: Sample[], distinctions: DistinctionRow[]): Contradiction[] {
+function buildContradictions(
+  likes: Sample[],
+  dislikes: Sample[],
+  distinctions: DistinctionRow[],
+): Contradiction[] {
   const items: Contradiction[] = [];
   if (likes.length < 3 || dislikes.length < 3) return items;
   for (const spec of FIELDS) {
@@ -406,7 +472,9 @@ function buildContradictions(likes: Sample[], dislikes: Sample[], distinctions: 
         sampleIds: [...likeRow.sampleIds, ...dislikeRow.sampleIds],
       });
     }
-    const split = [...like.bag.values()].filter((row) => row.count >= 2 && row.count / like.covered.length >= 0.3);
+    const split = [...like.bag.values()].filter(
+      (row) => row.count >= 2 && row.count / like.covered.length >= 0.3,
+    );
     if (split.length >= 2) {
       const [first, second] = split.sort((a, b) => b.count - a.count);
       items.push({
@@ -431,7 +499,8 @@ function buildOutliers(likes: Sample[], dislikes: Sample[]): Outlier[] {
     for (const row of bag.values()) {
       if (!best || row.count > best.count) best = row;
     }
-    if (!best || covered.length < 4 || best.count / covered.length < 0.5 || best.count < 2) continue;
+    if (!best || covered.length < 4 || best.count / covered.length < 0.5 || best.count < 2)
+      continue;
     modal.set(spec.key, { value: best.value, count: best.count, covered: covered.length });
   }
   if (modal.size < 5) return [];
@@ -447,7 +516,10 @@ function buildOutliers(likes: Sample[], dislikes: Sample[]): Outlier[] {
       comparable += 1;
       if (actual !== mode.value) {
         mismatches += 1;
-        if (details.length < 4) details.push(`${FIELD_BY_KEY[key]?.label ?? key}: ${actual} (common like is ${mode.value})`);
+        if (details.length < 4)
+          details.push(
+            `${FIELD_BY_KEY[key]?.label ?? key}: ${actual} (common like is ${mode.value})`,
+          );
       }
     }
     if (comparable >= 8 && mismatches / comparable >= 0.5) {
@@ -483,7 +555,12 @@ function buildOutliers(likes: Sample[], dislikes: Sample[]): Outlier[] {
   return outliers.slice(0, 8);
 }
 
-function buildProfile(preferred: Sample[], dislikes: Sample[], cores: Sample[], preferredCount: number) {
+function buildProfile(
+  preferred: Sample[],
+  dislikes: Sample[],
+  cores: Sample[],
+  preferredCount: number,
+) {
   const strong: ProfileItem[] = [];
   const moderate: ProfileItem[] = [];
   const weak: ProfileItem[] = [];
@@ -515,24 +592,50 @@ function buildProfile(preferred: Sample[], dislikes: Sample[], cores: Sample[], 
         coreCount: coreHits,
         coreCovered: core.covered.length,
         evidence: tierEvidence,
-        statement: statementFor(spec, value, preferredHits, pref.covered.length, dislikeHits, dislike.covered.length, coreHits, core.covered.length),
+        statement: statementFor(
+          spec,
+          value,
+          preferredHits,
+          pref.covered.length,
+          dislikeHits,
+          dislike.covered.length,
+          coreHits,
+          core.covered.length,
+        ),
       });
 
-      const dislikeLean = dislike.covered.length >= 2 && dRate >= 0.5 && dislikeHits >= 2 && pRate <= 0.25;
+      const dislikeLean =
+        dislike.covered.length >= 2 && dRate >= 0.5 && dislikeHits >= 2 && pRate <= 0.25;
       if (dislikeLean && !early) {
         explicit.push(item(evidenceFor(dislike.covered.length)));
       }
 
       const strongHit =
         !early &&
-        ((pref.covered.length >= 6 && pRate >= 0.65 && preferredHits >= 4 && (dislike.covered.length < 3 || dRate <= 0.3)) ||
-          (pref.covered.length >= 5 && dislike.covered.length >= 4 && separation >= 0.4 && preferredHits >= 3) ||
-          (core.covered.length >= 2 && coreRate >= 0.75 && pref.covered.length >= 3 && pRate >= 0.5 && preferredHits >= 2));
+        ((pref.covered.length >= 6 &&
+          pRate >= 0.65 &&
+          preferredHits >= 4 &&
+          (dislike.covered.length < 3 || dRate <= 0.3)) ||
+          (pref.covered.length >= 5 &&
+            dislike.covered.length >= 4 &&
+            separation >= 0.4 &&
+            preferredHits >= 3) ||
+          (core.covered.length >= 2 &&
+            coreRate >= 0.75 &&
+            pref.covered.length >= 3 &&
+            pRate >= 0.5 &&
+            preferredHits >= 2));
       const moderateHit =
         !strongHit &&
         !early &&
-        ((pref.covered.length >= 4 && pRate >= 0.55 && preferredHits >= 2 && (dislike.covered.length < 2 || dRate <= 0.4)) ||
-          (pref.covered.length >= 3 && dislike.covered.length >= 3 && separation >= 0.3 && preferredHits >= 2));
+        ((pref.covered.length >= 4 &&
+          pRate >= 0.55 &&
+          preferredHits >= 2 &&
+          (dislike.covered.length < 2 || dRate <= 0.4)) ||
+          (pref.covered.length >= 3 &&
+            dislike.covered.length >= 3 &&
+            separation >= 0.3 &&
+            preferredHits >= 2));
       const weakHit =
         !strongHit &&
         !moderateHit &&
@@ -540,22 +643,36 @@ function buildProfile(preferred: Sample[], dislikes: Sample[], cores: Sample[], 
           (pref.covered.length >= 3 && separation >= 0.2 && preferredHits >= 2) ||
           (early && preferredHits >= 1 && pRate >= 0.5));
 
-      if (strongHit) strong.push(item(evidenceFor(Math.min(pref.covered.length, Math.max(dislike.covered.length, pref.covered.length)))));
+      if (strongHit)
+        strong.push(
+          item(
+            evidenceFor(
+              Math.min(pref.covered.length, Math.max(dislike.covered.length, pref.covered.length)),
+            ),
+          ),
+        );
       else if (moderateHit) moderate.push(item(evidenceFor(pref.covered.length)));
       else if (weakHit) weak.push(item(early ? "insufficient" : evidenceFor(pref.covered.length)));
     }
   }
 
   const byRate = (a: ProfileItem, b: ProfileItem) =>
-    b.preferredCount / Math.max(1, b.preferredCovered) - a.preferredCount / Math.max(1, a.preferredCovered);
+    b.preferredCount / Math.max(1, b.preferredCovered) -
+    a.preferredCount / Math.max(1, a.preferredCovered);
   strong.sort(byRate);
   moderate.sort(byRate);
   weak.sort(byRate);
-  explicit.sort((a, b) => b.dislikeCount / Math.max(1, b.dislikeCovered) - a.dislikeCount / Math.max(1, a.dislikeCovered));
+  explicit.sort(
+    (a, b) =>
+      b.dislikeCount / Math.max(1, b.dislikeCovered) -
+      a.dislikeCount / Math.max(1, a.dislikeCovered),
+  );
 
-  const note = early
-    ? "Fewer than 3 analyzed likes or core references. Strong and moderate sections stay empty on purpose."
-    : "Preferred pool = Like + Core Reference. User corrections override the model. High and medium confidence only. Not-visible traits are left out of the denominator. This is not an image prompt.";
+  const note =
+    "Counts are evidence units: known clusters, otherwise subject aliases, otherwise ungrouped images (not proven independent). A unit can contain multiple states and values; percentages need not sum to 100%. Scoped labels override whole-image labels; any matching exclusion wins. Limited/invalid evidence is retained but excluded. " +
+    (early
+      ? "Fewer than 3 analyzed likes or core references. Strong and moderate sections stay empty on purpose."
+      : "Preferred pool = Like + Core Reference. User corrections override the model. High and medium confidence only. Not-visible traits are left out of the denominator. These are descriptive tendencies, not significance tests or image prompts.");
 
   return {
     strong: strong.slice(0, 12),
@@ -594,11 +711,17 @@ export function groupTitle(spec: GroupSpec): string {
   return `Tag: ${spec.tag}`;
 }
 
-export function compareGroups(samples: Sample[], aSpec: GroupSpec, bSpec: GroupSpec): CompareResult {
+export function compareGroups(
+  samples: Sample[],
+  aSpec: GroupSpec,
+  bSpec: GroupSpec,
+): CompareResult {
   const aSamples = groupSamples(samples, aSpec);
   const bSamples = groupSamples(samples, bSpec);
-  const aAnalyzed = analyzed(aSamples);
-  const bAnalyzed = analyzed(bSamples);
+  const aAnalyzed =
+    aSpec.kind === "label" ? evidencePool(samples, [aSpec.label]) : evidencePool(aSamples);
+  const bAnalyzed =
+    bSpec.kind === "label" ? evidencePool(samples, [bSpec.label]) : evidencePool(bSamples);
   const rows: CompareRow[] = [];
   for (const spec of FIELDS) {
     const a = coverage(aAnalyzed, spec);
@@ -656,9 +779,9 @@ export function sameGroup(a: GroupSpec, b: GroupSpec): boolean {
 
 export function toMarkdown(report: Report, generatedAt = new Date()): string {
   const c = report.counts;
-  const section = (title: string, lines: string[]) => `## ${title}\n\n${lines.length ? lines.map((line) => `- ${line}`).join("\n") : "_None at this sample size._"}\n`;
-  const itemLine = (item: ProfileItem) =>
-    `${item.statement} Evidence: ${item.evidence}.`;
+  const section = (title: string, lines: string[]) =>
+    `## ${title}\n\n${lines.length ? lines.map((line) => `- ${line}`).join("\n") : "_None at this sample size._"}\n`;
+  const itemLine = (item: ProfileItem) => `${item.statement} Evidence: ${item.evidence}.`;
   const comboLine = (row: ComboRow) =>
     `${row.leftLabel} + ${row.rightLabel} (${row.count}/${row.covered}, ${row.evidence})`;
   return [
@@ -672,18 +795,41 @@ export function toMarkdown(report: Report, generatedAt = new Date()): string {
     "",
     `- Samples: ${c.total}`,
     `- Analyzed: ${c.analyzed}`,
-    `- Like: ${c.likeAnalyzed} analyzed / ${c.like} labeled`,
-    `- Dislike: ${c.dislikeAnalyzed} analyzed / ${c.dislike} labeled`,
-    `- Core reference: ${c.coreAnalyzed} analyzed / ${c.core} labeled`,
+    `- Like: ${c.likeAnalyzed} scoped analyses; ${c.like} whole-image labels`,
+    `- Dislike: ${c.dislikeAnalyzed} scoped analyses; ${c.dislike} whole-image labels`,
+    `- Core reference: ${c.coreAnalyzed} scoped analyses; ${c.core} whole-image labels`,
     `- Neutral: ${c.neutralAnalyzed} analyzed / ${c.neutral} labeled`,
     `- User corrections applied: ${c.edits}`,
     "",
     report.caution ? `> ${report.caution}\n` : "",
-    section("1. Strong evidence", report.profile.strong.map(itemLine)),
+    section(
+      "1. Stronger descriptive tendencies (not validated preferences)",
+      report.profile.strong.map(itemLine),
+    ),
     section("2. Moderate evidence", report.profile.moderate.map(itemLine)),
     section("3. Weak / uncertain tendencies", report.profile.weak.map(itemLine)),
-    section("4. Explicit dislikes", report.profile.dislikes.map(itemLine)),
+    section(
+      "4. Inferred dislike associations (not direct statements)",
+      report.profile.dislikes.map(itemLine),
+    ),
     section("5. Important feature combinations", report.profile.combinations.map(comboLine)),
+    section("Research evidence", [
+      `Raw images: ${report.research.rawImages}; evidence units: ${report.research.evidenceUnits}; ungrouped: ${report.research.ungrouped}; unrated: ${report.research.unrated}. Unknown groups are not proven independent.`,
+      ...report.research.records.flatMap((r) => [
+        ...(r.research?.judgments ?? []).map(
+          (j) =>
+            `${r.fileName} [${j.scope}] ${j.excluded ? "EXCLUDED" : j.label}; original quote: ${j.quote}; interpretation: ${j.interpretation}; source: ${j.source}; date: ${j.at}`,
+        ),
+        ...(r.research?.routes ?? []).map(
+          (j) =>
+            `${r.fileName} — ${j.status}: When ${j.condition}, prefer ${j.preference}; boundary ${j.boundary}; counterexample ${j.counterexample}`,
+        ),
+        ...(r.research?.pairs ?? []).map(
+          (j) =>
+            `${r.fileName} vs ${j.otherId} [${j.scope}]: ${j.choice}; quote: ${j.quote}; date: ${j.at}`,
+        ),
+      ]),
+    ]),
     "## Method",
     "",
     report.profile.note,
@@ -711,17 +857,18 @@ export function toProfileJson(report: Report, generatedAt = new Date()) {
     }));
   return {
     format: "aesthetic-sample-analyzer.profile",
-    version: 1,
+    version: 2,
     generatedAt: generatedAt.toISOString(),
     imagePrompts: null,
-    note: "Version 1 does not generate image prompts. Counts are descriptive, not significance tests.",
+    note: "No image prompts are generated. Counts are descriptive evidence units, not significance tests. Direct quotes and hypotheses are separate research records.",
     caution: report.caution,
     counts: report.counts,
     method: report.profile.note,
     strong: pack(report.profile.strong),
     moderate: pack(report.profile.moderate),
     weak: pack(report.profile.weak),
-    explicitDislikes: pack(report.profile.dislikes),
+    inferredDislikes: pack(report.profile.dislikes),
+    research: report.research,
     combinations: report.profile.combinations.map((row) => ({
       features: [row.leftLabel, row.rightLabel],
       count: row.count,
