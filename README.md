@@ -151,6 +151,19 @@ screenshots/             Desktop/mobile QA captures and verdicts
 
 The UI is built with React 19, TanStack Start/Router, Tailwind CSS, Radix primitives, Zustand, and `react-resizable-panels`.
 
+## 中文界面、双语分析与导出
+
+- 界面默认中文；3840×2160 下保留 26px 根字号，手机布局可横向滚动功能导航。
+- 在“属性分析”选择“分析提示词语言”：中文或 English。选择会保留；切换只影响后续分析，不重写已有结果。模型属性标识保持统一，统计兼容旧样本库。
+- 在“审美画像”选择“中文文件”或“English file”，分别下载 Markdown／JSON。JSON 保留稳定的英文标识，中文文件另有中文显示字段，便于其他 AI 对照。
+- 英文文件始终保留用户原话、备注及研究记录。可点击“补充英文译文（API）”，确认后仅发送相关文字给当前配置的模型，不发送图片；可能消耗 API 额度。每次最多 30 段／12000 字，不自动重试，也不会因普通导出而调用 API。
+- 译文标记为未经核验的参考译文，以原文为准；没有译文的内容明确标记为未翻译。修改原文后旧译文不会自动套用。
+- “导出样本库”保存图片、标签、分析、研究记录及相关英文译文，可导入恢复。项目源码备份不等于个人样本备份，请将样本库导出文件另存本地，不要上传到公开仓库。API key 和本地私有配置不进入 Git。
+
+### 本轮验证
+
+类型检查、自动化测试、生产构建及隔离浏览器回归均已验证。浏览器检查覆盖五个页面、4K／手机布局、语言选择持久化、中英文 Markdown／JSON 下载、翻译取消不发请求、样本与译文备份恢复。翻译网络逻辑使用模拟响应验证，未做真实付费翻译调用；实际可用性取决于账号额度、模型权限和网络。
+
 ## Current limitations
 
 - The active library is local to one browser profile unless it is exported and imported elsewhere.

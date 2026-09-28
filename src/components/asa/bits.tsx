@@ -1,3 +1,4 @@
+import { zh } from "@/lib/asa/zh";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -69,20 +70,34 @@ export function Thumb({
       className="h-full w-full object-cover outline outline-1 -outline-offset-1 outline-white/10"
     />
   );
-  if (!onClick) return <div className={cn("overflow-hidden bg-raised", className)}>{image}</div>;
+  if (!onClick)
+    return <div className={cn("overflow-hidden bg-raised", className)}>{zh(image)}</div>;
   return (
-    <button type="button" aria-label={sample.fileName} onClick={onClick} className={cn("overflow-hidden bg-raised", className)}>
-      {image}
+    <button
+      type="button"
+      aria-label={sample.fileName}
+      onClick={onClick}
+      className={cn("overflow-hidden bg-raised", className)}
+    >
+      {zh(image)}
     </button>
   );
 }
 
-export function Panel({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
+export function Panel({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  children: ReactNode;
+}) {
   return (
     <section className="border-b border-line py-4">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium text-fg">{title}</h2>
-        {meta ? <p className="font-mono text-xs text-faint tabular-nums">{meta}</p> : null}
+        <h2 className="text-sm font-medium text-fg">{zh(title)}</h2>
+        {meta ? <p className="font-mono text-xs text-faint tabular-nums">{zh(meta)}</p> : null}
       </div>
       {children}
     </section>
@@ -94,7 +109,5 @@ export function EmptyNote({ children }: { children: ReactNode }) {
 }
 
 export function Caution({ children }: { children: ReactNode }) {
-  return (
-    <p className="border border-line bg-raised px-3 py-2 text-sm text-warn">{children}</p>
-  );
+  return <p className="border border-line bg-raised px-3 py-2 text-sm text-warn">{children}</p>;
 }

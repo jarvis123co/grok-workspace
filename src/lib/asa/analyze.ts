@@ -14,13 +14,14 @@ export const analyzeSampleImage = createServerFn({ method: "POST" })
     }
     if (image.length > 1_800_000)
       throw new Error("Image is too large to analyze. Try a smaller file.");
-    return { image };
+    const language: "zh" | "en" = (input as { language?: unknown }).language === "en" ? "en" : "zh";
+    return { image, language };
   })
   .handler(async ({ data }): Promise<AnalyzeResult> => {
     const { loadVisionConfig, requestVision } = await import("./vision-server");
     try {
       const config = loadVisionConfig();
-      const result = await requestVision(config, data.image, analysisSystemPrompt());
+      const result = await requestVision(config, data.image, analysisSystemPrompt(data.language));
       const normalized = normalizeModelPayload(result.text);
       return {
         ok: true,

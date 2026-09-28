@@ -1,3 +1,4 @@
+import { zh } from "@/lib/asa/zh";
 import { useMemo, useState } from "react";
 import { Caution, EmptyNote, Thumb } from "@/components/asa/bits";
 import { CATEGORIES, LABELS, type LabelId } from "@/lib/asa/schema";
@@ -7,9 +8,21 @@ import { collectTags, useLibrary } from "@/lib/asa/store";
 type Preset = { name: string; a: GroupSpec; b: GroupSpec };
 
 const PRESETS: Preset[] = [
-  { name: "Like vs Dislike", a: { kind: "label", label: "like" }, b: { kind: "label", label: "dislike" } },
-  { name: "Core vs Like", a: { kind: "label", label: "core" }, b: { kind: "label", label: "like" } },
-  { name: "Core vs Dislike", a: { kind: "label", label: "core" }, b: { kind: "label", label: "dislike" } },
+  {
+    name: "Like vs Dislike",
+    a: { kind: "label", label: "like" },
+    b: { kind: "label", label: "dislike" },
+  },
+  {
+    name: "Core vs Like",
+    a: { kind: "label", label: "core" },
+    b: { kind: "label", label: "like" },
+  },
+  {
+    name: "Core vs Dislike",
+    a: { kind: "label", label: "core" },
+    b: { kind: "label", label: "dislike" },
+  },
 ];
 
 function encode(spec: GroupSpec): string {
@@ -40,19 +53,21 @@ export function CompareView() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-end gap-2 border-b border-line px-4 py-3">
-        <GroupSelect label="Group A" value={a} tags={tags} onChange={setA} />
-        <GroupSelect label="Group B" value={b} tags={tags} onChange={setB} />
+        <GroupSelect label={zh("Group A")} value={a} tags={tags} onChange={setA} />
+        <GroupSelect label={zh("Group B")} value={b} tags={tags} onChange={setB} />
         <label className="text-xs text-faint">
-          Category
+          {zh(" Category ")}
           <select
-            aria-label="Category"
+            aria-label={zh("Category")}
             value={category}
             onChange={(event) => setCategory(event.target.value)}
             className="mt-1 block h-10 rounded-md bg-raised px-2 text-sm text-fg shadow-ring"
           >
-            <option value="all">All dimensions</option>
+            <option value="all">{zh("All dimensions")}</option>
             {CATEGORIES.map((item) => (
-              <option key={item} value={item}>{item}</option>
+              <option key={item} value={item}>
+                {zh(item)}
+              </option>
             ))}
           </select>
         </label>
@@ -67,48 +82,102 @@ export function CompareView() {
               }}
               className="h-10 rounded-md px-2 text-xs text-muted hover:bg-raised hover:text-fg"
             >
-              {preset.name}
+              {zh(preset.name)}
             </button>
           ))}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
         <p className="mb-2 font-mono text-xs text-faint tabular-nums">
-          {result.aLabel}: {result.aAnalyzed} analyzed / {result.aTotal} labeled
-          {" · "}
-          {result.bLabel}: {result.bAnalyzed} analyzed / {result.bTotal} labeled
+          {zh(result.aLabel)}
+          {zh(": ")}
+          {zh(result.aAnalyzed)}
+          {zh(" analyzed / ")}
+          {zh(result.aTotal)}
+          {zh(" labeled ")}
+          {zh(" · ")}
+          {zh(result.bLabel)}
+          {zh(": ")}
+          {zh(result.bAnalyzed)}
+          {zh(" analyzed / ")}
+          {zh(result.bTotal)}
+          {zh(" labeled ")}
         </p>
-        {sameGroup(a, b) ? <Caution>Both sides are the same group, so every difference is zero.</Caution> : null}
-        {result.caution ? <div className="mt-2"><Caution>{result.caution}</Caution></div> : null}
+        {sameGroup(a, b) ? (
+          <Caution>{zh("Both sides are the same group, so every difference is zero.")}</Caution>
+        ) : null}
+        {result.caution ? (
+          <div className="mt-2">
+            <Caution>{zh(result.caution)}</Caution>
+          </div>
+        ) : null}
         <div className="compare-head mt-3 border-b border-line pb-1 text-xs text-faint">
-          <span>Attribute</span>
-          <span>{result.aLabel}</span>
-          <span>{result.bLabel}</span>
-          <span>Difference</span>
+          <span>{zh("Attribute")}</span>
+          <span>{zh(result.aLabel)}</span>
+          <span>{zh(result.bLabel)}</span>
+          <span>{zh("Difference")}</span>
         </div>
         {rows.length === 0 ? (
-          <div className="mt-3"><EmptyNote>No medium or high confidence traits to compare in this slice.</EmptyNote></div>
+          <div className="mt-3">
+            <EmptyNote>
+              {zh("No medium or high confidence traits to compare in this slice.")}
+            </EmptyNote>
+          </div>
         ) : (
           rows.map((row) => {
             const id = `${row.key}:${row.value}`;
             const open = openKey === id;
             return (
               <div key={id}>
-                <button type="button" className="compare-row w-full text-left" onClick={() => setOpenKey(open ? null : id)}>
-                  <span className="min-w-0 truncate text-sm text-fg">{row.category} · {row.fieldLabel}: {row.value}</span>
-                  <span className="font-mono text-xs text-muted tabular-nums">{pctLabel(row.aCount, row.aCovered)}</span>
-                  <span className="font-mono text-xs text-muted tabular-nums">{pctLabel(row.bCount, row.bCovered)}</span>
+                <button
+                  type="button"
+                  className="compare-row w-full text-left"
+                  onClick={() => setOpenKey(open ? null : id)}
+                >
+                  <span className="min-w-0 truncate text-sm text-fg">
+                    {zh(row.category)}
+                    {zh(" · ")}
+                    {zh(row.fieldLabel)}
+                    {zh(": ")}
+                    {zh(row.value)}
+                  </span>
+                  <span className="font-mono text-xs text-muted tabular-nums">
+                    {zh(pctLabel(row.aCount, row.aCovered))}
+                  </span>
+                  <span className="font-mono text-xs text-muted tabular-nums">
+                    {zh(pctLabel(row.bCount, row.bCovered))}
+                  </span>
                   <span>
                     <span className="font-mono text-xs text-fg tabular-nums">
-                      {row.delta == null ? "—" : `${row.delta > 0 ? "+" : ""}${Math.round(row.delta * 100)} pp`}
+                      {zh(
+                        row.delta == null
+                          ? "—"
+                          : `${row.delta > 0 ? "+" : ""}${Math.round(row.delta * 100)} pp`,
+                      )}
                     </span>
                     <DeltaBar delta={row.delta} />
                   </span>
                 </button>
                 {open ? (
                   <div className="grid gap-3 py-2 sm:grid-cols-2">
-                    <Reps title={result.aLabel} ids={row.aSampleIds} byId={byId} onOpen={(sampleId) => { select(sampleId); setView("analysis"); }} />
-                    <Reps title={result.bLabel} ids={row.bSampleIds} byId={byId} onOpen={(sampleId) => { select(sampleId); setView("analysis"); }} />
+                    <Reps
+                      title={result.aLabel}
+                      ids={row.aSampleIds}
+                      byId={byId}
+                      onOpen={(sampleId) => {
+                        select(sampleId);
+                        setView("analysis");
+                      }}
+                    />
+                    <Reps
+                      title={result.bLabel}
+                      ids={row.bSampleIds}
+                      byId={byId}
+                      onOpen={(sampleId) => {
+                        select(sampleId);
+                        setView("analysis");
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -149,14 +218,30 @@ function Reps({
   byId: Map<string, import("@/lib/asa/schema").Sample>;
   onOpen: (id: string) => void;
 }) {
-  const shown = ids.slice(0, 4).map((id) => byId.get(id)).filter((sample): sample is NonNullable<typeof sample> => Boolean(sample));
+  const shown = ids
+    .slice(0, 4)
+    .map((id) => byId.get(id))
+    .filter((sample): sample is NonNullable<typeof sample> => Boolean(sample));
   return (
     <div>
-      <p className="mb-1 text-xs text-faint">{title} · {ids.length} sample{ids.length === 1 ? "" : "s"}</p>
-      {shown.length === 0 ? <p className="text-xs text-faint">No representative image.</p> : (
+      <p className="mb-1 text-xs text-faint">
+        {zh(title)}
+        {zh(" · ")}
+        {zh(ids.length)}
+        {zh(" sample")}
+        {zh(ids.length === 1 ? "" : "s")}
+      </p>
+      {shown.length === 0 ? (
+        <p className="text-xs text-faint">{zh("No representative image.")}</p>
+      ) : (
         <div className="flex gap-1">
           {shown.map((sample) => (
-            <Thumb key={sample.id} sample={sample} onClick={() => onOpen(sample.id)} className="size-12" />
+            <Thumb
+              key={sample.id}
+              sample={sample}
+              onClick={() => onOpen(sample.id)}
+              className="size-12"
+            />
           ))}
         </div>
       )}
@@ -164,27 +249,47 @@ function Reps({
   );
 }
 
-function GroupSelect({ label, value, tags, onChange }: { label: string; value: GroupSpec; tags: string[]; onChange: (spec: GroupSpec) => void }) {
+function GroupSelect({
+  label,
+  value,
+  tags,
+  onChange,
+}: {
+  label: string;
+  value: GroupSpec;
+  tags: string[];
+  onChange: (spec: GroupSpec) => void;
+}) {
   return (
     <label className="text-xs text-faint">
-      {label}
+      {zh(label)}
       <select
         aria-label={label}
         value={encode(value)}
         onChange={(event) => onChange(decode(event.target.value))}
         className="mt-1 block h-10 min-w-36 rounded-md bg-raised px-2 text-sm text-fg shadow-ring"
       >
-        <optgroup label="Preference">
+        <optgroup label={zh("Preference")}>
           {LABELS.map((item) => (
-            <option key={item.id} value={`label:${item.id}`}>{item.name}</option>
+            <option key={item.id} value={`label:${item.id}`}>
+              {zh(item.name)}
+            </option>
           ))}
         </optgroup>
-        <optgroup label="Tags">
-          {tags.length === 0 ? <option value="tag:" disabled>No tags yet</option> : tags.map((tag) => (
-            <option key={tag} value={`tag:${tag}`}>{tag}</option>
-          ))}
+        <optgroup label={zh("Tags")}>
+          {tags.length === 0 ? (
+            <option value="tag:" disabled>
+              {zh("No tags yet")}
+            </option>
+          ) : (
+            tags.map((tag) => (
+              <option key={tag} value={`tag:${tag}`}>
+                {tag}
+              </option>
+            ))
+          )}
         </optgroup>
-        <option value="analyzed">All analyzed</option>
+        <option value="analyzed">{zh("All analyzed")}</option>
       </select>
     </label>
   );

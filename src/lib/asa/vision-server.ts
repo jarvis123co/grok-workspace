@@ -87,13 +87,28 @@ export function visionRequest(config: VisionConfig, image: string, prompt: strin
 }
 
 export async function requestVision(config: VisionConfig, image: string, prompt: string) {
+  return requestCompletion(config, visionRequest(config, image, prompt));
+}
+
+export async function requestText(config: VisionConfig, prompt: string, text: string) {
+  const body = visionRequest(config, "", prompt);
+  return requestCompletion(config, {
+    ...body,
+    messages: [
+      { role: "system", content: prompt },
+      { role: "user", content: text },
+    ],
+  });
+}
+
+async function requestCompletion(config: VisionConfig, body: unknown) {
   // No automatic retries of billable requests; never expose raw upstream errors.
   let response: Response;
   try {
     response = await fetch(config.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
-      body: JSON.stringify(visionRequest(config, image, prompt)),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(120_000),
     });
   } catch {
@@ -111,14 +126,14 @@ export async function requestVision(config: VisionConfig, image: string, prompt:
       `${config.provider.toUpperCase()} analysis failed (${response.status}). ${hints[response.status] ?? "Please check the provider console."}`,
     );
   }
-  const body = (await response.json()) as {
+  const result = (await response.json()) as {
     choices?: { finish_reason?: string; message?: { content?: unknown } }[];
     usage?: unknown;
   };
-  const choice = body.choices?.[0];
+  const choice = result.choices?.[0];
   if (choice?.finish_reason === "length")
     throw new Error("Analysis was truncated. No partial result was saved.");
   if (typeof choice?.message?.content !== "string" || !choice.message.content.trim())
     throw new Error("The model returned no analysis text.");
-  return { text: choice.message.content, usage: body.usage };
+  return { text: choice.message.content, usage: result.usage };
 }

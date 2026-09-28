@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { originalTexts, readTranslationCache, sanitizeTranslations } from "./translation";
+import { buildReport } from "./stats";
 import { sanitizeResearch, type Research } from "./research";
 import { analyzeSampleImage } from "./analyze";
 import { dataUrlToBlob, fileToStoredBlob, blobToAnalysisDataUrl, blobToDataUrl } from "./image";
@@ -23,6 +25,8 @@ export type AnalyzedFilter = "all" | "analyzed" | "pending";
 type Batch = { running: boolean; done: number; total: number };
 
 type LibraryState = {
+  promptLanguage: "zh" | "en";
+  setPromptLanguage: (language: "zh" | "en") => void;
   setResearch: (id: string, research: Research) => void;
   startManual: (id: string) => void;
   ready: boolean;
@@ -154,6 +158,15 @@ export function collectTags(samples: Sample[]): string[] {
 }
 
 export const useLibrary = create<LibraryState>((set, get) => ({
+  promptLanguage: "zh",
+  setPromptLanguage: (promptLanguage) => {
+    set({ promptLanguage });
+    try {
+      localStorage.setItem("asa-prompt-language", promptLanguage);
+    } catch {
+      /* Optional preference only. */
+    }
+  },
   setResearch: (id, research) =>
     patch(set, id, (sample) => ({ ...sample, research: sanitizeResearch(research) })),
   startManual: (id) =>
@@ -177,6 +190,11 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   batchCancel: false,
 
   load: async () => {
+    try {
+      set({ promptLanguage: localStorage.getItem("asa-prompt-language") === "en" ? "en" : "zh" });
+    } catch {
+      /* Storage may be unavailable. */
+    }
     try {
       const rows = await loadAll();
       const samples = rows.map(toSample).sort((a, b) => b.createdAt - a.createdAt);
@@ -393,10 +411,16 @@ export const useLibrary = create<LibraryState>((set, get) => ({
 
   exportLibrary: async () => {
     const samples = get().samples;
+    const cache = readTranslationCache();
     const payload = {
       format: "aesthetic-sample-analyzer.library",
       version: 2,
       exportedAt: new Date().toISOString(),
+      englishTranslations: Object.fromEntries(
+        originalTexts(buildReport(samples))
+          .filter((text) => Object.hasOwn(cache, text))
+          .map((text) => [text, cache[text]]),
+      ),
       samples: await Promise.all(
         samples.map(async (sample) => {
           const blob = blobs.get(sample.id);
@@ -486,10 +510,29 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       set({ status: "Nothing new to import." });
       return;
     }
+    let translationWarning = "";
+    try {
+      const importedTranslations = sanitizeTranslations(
+        (parsed as { englishTranslations?: unknown }).englishTranslations,
+      );
+      const allowed = new Set(originalTexts(buildReport(incoming)));
+      const relevant = Object.fromEntries(
+        Object.entries(importedTranslations).filter(([key]) => allowed.has(key)),
+      );
+      localStorage.setItem(
+        "asa-translations-en",
+        JSON.stringify({ ...relevant, ...readTranslationCache() }),
+      );
+      window.dispatchEvent(new Event("asa-translations-updated"));
+    } catch {
+      translationWarning = "（样本已导入，但译文缓存未能保存，请保留备份文件。）";
+    }
     set((state) => ({
       samples: [...incoming, ...state.samples].sort((a, b) => b.createdAt - a.createdAt),
       selectedId: state.selectedId ?? incoming[0]?.id ?? null,
-      status: `Imported ${incoming.length} sample${incoming.length === 1 ? "" : "s"}.`,
+      status: translationWarning
+        ? `已导入 ${incoming.length} 张样本。${translationWarning}`
+        : `Imported ${incoming.length} sample${incoming.length === 1 ? "" : "s"}.`,
     }));
   },
 }));
@@ -519,7 +562,9 @@ async function runAnalysis(
   const blob = blobs.get(id);
   if (!blob) throw new Error("This sample’s image is missing from local storage.");
   const dataUrl = await blobToAnalysisDataUrl(blob);
-  const result = await analyzeSampleImage({ data: { image: dataUrl } });
+  const result = await analyzeSampleImage({
+    data: { image: dataUrl, language: get().promptLanguage },
+  });
   if (!result.ok) throw new Error(result.error);
   const current = get().samples.find((sample) => sample.id === id);
   if (!current) return;

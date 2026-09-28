@@ -1041,11 +1041,23 @@ function extractJson(text: string): string {
   return fenced?.[1]?.trim() || trimmed;
 }
 
-export function analysisSystemPrompt(): string {
+export function analysisSystemPrompt(language: "zh" | "en" = "en"): string {
   const keys = FIELDS.map((field) => {
     const multi = field.multi ? " [multi]" : "";
     return `- ${field.key} (${field.category} / ${field.label})${multi}: ${field.options.join(" | ")}`;
   });
+  if (language === "zh")
+    return [
+      "你为私人审美研究工具提取图片中可见的属性，不评价美丑，也不推断用户偏好。",
+      "不得推断身份、族裔、国籍、性格、职业、经济状况、健康或其他不可见的个人特征。",
+      "身体细节只描述当前视角中可见的轮廓，不推测衣物遮挡的解剖结构或具体尺寸。不是明确成年人的主体，不填写胸部、臀部和袜装细节。",
+      '仅返回一个 JSON 对象：{"observations":"一两句简体中文客观描述","attributes":{"字段英文key":{"value":"下列英文选项","confidence":"high或medium或low或not_visible"}}}。',
+      "必须包含所有字段；键名、枚举值和置信度保持下列英文标识不变，只有 observations 使用中文。多选字段用 1 至 4 个选项组成数组。",
+      "高置信度仅用于明确可见特征；合理可见为 medium，推测为 low。看不见、无法判断时 value 为 not visible，confidence 为 not_visible，不能根据整体喜好补全。",
+      "年龄只记录视觉成熟度，不估计实际年龄。人体结构问题只指图像几何异常，不确定时用 possible 和 low。禁止添加生图提示词、评分或身份猜测。",
+      "字段及允许选项：",
+      ...keys,
+    ].join("\n");
   return [
     "You extract observable visual attributes for a private research tool.",
     "You do not decide whether an image is beautiful, pleasing, attractive, or good.",

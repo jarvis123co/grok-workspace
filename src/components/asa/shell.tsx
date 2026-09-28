@@ -1,3 +1,4 @@
+import { zh } from "@/lib/asa/zh";
 import { useEffect } from "react";
 import { FileText, GitCompare, LayoutGrid, ScanSearch, Waypoints } from "lucide-react";
 import { Group, Panel, Separator } from "react-resizable-panels";
@@ -39,14 +40,21 @@ export function Shell() {
       <header className="shrink-0 border-b border-line bg-surface">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-medium tracking-wide text-fg">Aesthetic Sample Analyzer</h1>
-            <p className="truncate font-mono text-xs text-faint">Observable traits · your labels · no beauty score</p>
+            <h1 className="truncate text-sm font-medium tracking-wide text-fg">
+              {zh("Aesthetic Sample Analyzer")}
+            </h1>
+            <p className="truncate font-mono text-xs text-faint">
+              {zh("Observable traits · your labels · no beauty score")}
+            </p>
           </div>
           <p className="ml-auto shrink-0 font-mono text-xs text-muted tabular-nums">
-            {samples.length} samples · {analyzed} analyzed
+            {zh(samples.length)}
+            {zh(" samples · ")}
+            {zh(analyzed)}
+            {zh(" analyzed ")}
           </p>
         </div>
-        <nav aria-label="Sections" className="flex gap-1 overflow-x-auto px-2 pb-2">
+        <nav aria-label={zh("Sections")} className="flex gap-1 overflow-x-auto px-2 pb-2">
           {VIEWS.map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
@@ -58,11 +66,13 @@ export function Shell() {
                 onClick={() => setView(item.id)}
                 className={cn(
                   "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm",
-                  active ? "bg-raised text-fg shadow-ring" : "text-muted hover:bg-raised hover:text-fg",
+                  active
+                    ? "bg-raised text-fg shadow-ring"
+                    : "text-muted hover:bg-raised hover:text-fg",
                 )}
               >
                 <Icon className="size-4" aria-hidden="true" />
-                {item.label}
+                {zh(item.label)}
               </button>
             );
           })}
@@ -83,16 +93,29 @@ export function Shell() {
       </main>
       {loadError || status || batch.running ? (
         <footer className="shrink-0 border-t border-line bg-surface px-3 py-2 text-xs text-muted">
-          {loadError ? <span className="text-dislike">{loadError}. </span> : null}
-          {batch.running ? `Analyzing ${batch.done}/${batch.total}. ` : ""}
-          {status}
+          {loadError ? (
+            <span className="text-dislike">
+              {zh(loadError)}
+              {zh(". ")}
+            </span>
+          ) : null}
+          {zh(batch.running ? `Analyzing ${batch.done}/${batch.total}. ` : "")}
+          {zh(status)}
         </footer>
       ) : null}
     </div>
   );
 }
 
-function SamplesWorkspace({ mounted, wide, selected }: { mounted: boolean; wide: boolean; selected: boolean }) {
+function SamplesWorkspace({
+  mounted,
+  wide,
+  selected,
+}: {
+  mounted: boolean;
+  wide: boolean;
+  selected: boolean;
+}) {
   if (mounted && wide && selected) {
     return (
       <Group orientation="horizontal" className="h-full">

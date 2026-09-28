@@ -9,6 +9,9 @@ import {
   statTokens,
 } from "./schema.ts";
 import { evidencePool, unitId } from "./research.ts";
+import { zh } from "./zh.ts";
+import { markdownZh } from "./export-zh.ts";
+import { translationRows, type Translations } from "./translation.ts";
 
 export type Evidence = "insufficient" | "anecdotal" | "limited" | "usable";
 
@@ -77,7 +80,7 @@ export type Report = {
     ungrouped: number;
     unrated: number;
     excludedOrLimited: number;
-    records: { sampleId: string; fileName: string; research: Sample["research"] }[];
+    records: { sampleId: string; fileName: string; notes?: string; research: Sample["research"] }[];
   };
   counts: {
     total: number;
@@ -362,8 +365,13 @@ export function buildReport(samples: Sample[]): Report {
         (s) => s.research && (!s.research.included || s.research.validity !== "valid"),
       ).length,
       records: samples
-        .filter((s) => s.research)
-        .map((s) => ({ sampleId: s.id, fileName: s.fileName, research: s.research })),
+        .filter((s) => s.research || s.notes)
+        .map((s) => ({
+          sampleId: s.id,
+          fileName: s.fileName,
+          notes: s.notes,
+          research: s.research,
+        })),
     },
     counts,
     caution,
@@ -777,7 +785,13 @@ export function sameGroup(a: GroupSpec, b: GroupSpec): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export function toMarkdown(report: Report, generatedAt = new Date()): string {
+export function toMarkdown(
+  report: Report,
+  generatedAt = new Date(),
+  language: "zh" | "en" = "en",
+  translations: Translations = {},
+): string {
+  if (language === "zh") return markdownZh(report, generatedAt);
   const c = report.counts;
   const section = (title: string, lines: string[]) =>
     `## ${title}\n\n${lines.length ? lines.map((line) => `- ${line}`).join("\n") : "_None at this sample size._"}\n`;
@@ -816,6 +830,7 @@ export function toMarkdown(report: Report, generatedAt = new Date()): string {
     section("Research evidence", [
       `Raw images: ${report.research.rawImages}; evidence units: ${report.research.evidenceUnits}; ungrouped: ${report.research.ungrouped}; unrated: ${report.research.unrated}. Unknown groups are not proven independent.`,
       ...report.research.records.flatMap((r) => [
+        `Sample: ${r.fileName}; id: ${r.sampleId}; original notes: ${r.notes ?? ""}; source: ${r.research?.source ?? ""}; state: ${r.research?.state ?? ""}`,
         ...(r.research?.judgments ?? []).map(
           (j) =>
             `${r.fileName} [${j.scope}] ${j.excluded ? "EXCLUDED" : j.label}; original quote: ${j.quote}; interpretation: ${j.interpretation}; source: ${j.source}; date: ${j.at}`,
@@ -830,6 +845,13 @@ export function toMarkdown(report: Report, generatedAt = new Date()): string {
         ),
       ]),
     ]),
+    section("Original text and English reference translations", [
+      "Original text is authoritative. Machine translations are unverified aids, not new evidence. Missing translations are explicitly marked.",
+      ...translationRows(report, translations).map(
+        (r) =>
+          `Original: ${JSON.stringify(r.original)} | English: ${r.englishTranslation ? JSON.stringify(r.englishTranslation) : "[not translated]"}`,
+      ),
+    ]),
     "## Method",
     "",
     report.profile.note,
@@ -842,28 +864,48 @@ export function toMarkdown(report: Report, generatedAt = new Date()): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-export function toProfileJson(report: Report, generatedAt = new Date()) {
+export function toProfileJson(
+  report: Report,
+  generatedAt = new Date(),
+  language: "zh" | "en" = "en",
+  translations: Translations = {},
+) {
+  const display = (value: string) => (language === "zh" ? zh(value) : value);
   const pack = (items: ProfileItem[]) =>
     items.map((item) => ({
       category: item.category,
       field: item.fieldLabel,
       key: item.key,
       value: item.value,
+      displayCategory: display(item.category),
+      displayField: display(item.fieldLabel),
+      displayValue: display(item.value),
       preferred: { count: item.preferredCount, covered: item.preferredCovered },
       dislike: { count: item.dislikeCount, covered: item.dislikeCovered },
       coreReference: { count: item.coreCount, covered: item.coreCovered },
       evidence: item.evidence,
-      statement: item.statement,
+      statement: display(item.statement),
     }));
   return {
     format: "aesthetic-sample-analyzer.profile",
+    language: language === "zh" ? "zh-CN" : "en",
+    userTextPolicy:
+      language === "zh"
+        ? "用户原话、来源、解释与假设保留原文；英文 key、value、category 等标识不变，display 字段提供中文对照。"
+        : "User quotes, sources, interpretations and hypotheses remain verbatim in their original language. Canonical keys and values are language-independent.",
     version: 2,
     generatedAt: generatedAt.toISOString(),
     imagePrompts: null,
-    note: "No image prompts are generated. Counts are descriptive evidence units, not significance tests. Direct quotes and hypotheses are separate research records.",
-    caution: report.caution,
+    note:
+      language === "zh"
+        ? "不生成生图提示词。计数为描述性证据组，不是显著性检验。原话和假设单独记录。"
+        : "No image prompts are generated. Counts are descriptive evidence units, not significance tests. Direct quotes and hypotheses are separate research records.",
+    translationPolicy:
+      "Original text is authoritative. Machine translations are unverified reference only, not new evidence.",
+    textTranslations: language === "en" ? translationRows(report, translations) : [],
+    caution: report.caution ? display(report.caution) : null,
     counts: report.counts,
-    method: report.profile.note,
+    method: display(report.profile.note),
     strong: pack(report.profile.strong),
     moderate: pack(report.profile.moderate),
     weak: pack(report.profile.weak),
@@ -871,6 +913,8 @@ export function toProfileJson(report: Report, generatedAt = new Date()) {
     research: report.research,
     combinations: report.profile.combinations.map((row) => ({
       features: [row.leftLabel, row.rightLabel],
+      displayFeatures: [display(row.leftLabel), display(row.rightLabel)],
+      featureIds: [row.left, row.right],
       count: row.count,
       covered: row.covered,
       evidence: row.evidence,
