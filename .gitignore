@@ -1,4 +1,5 @@
 node_modules/
+.launcher/
 .pnpm-store/
 screenshots/research-qa/failure.png
 .output/

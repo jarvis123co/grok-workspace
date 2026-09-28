@@ -49,6 +49,8 @@ The library, labels, manual edits, statistics, comparison tools, and exports wor
 
 ### Install and run
 
+Windows users with dependencies already installed can double-click `启动审美画像.cmd` in this folder. It starts a hidden, local-only server at `http://127.0.0.1:8087/` and opens the default browser. Repeat launches reuse the running app. The server does not start automatically with Windows; logs are under `.launcher/`. No API key or payment setup is performed. Always use the same browser and URL to access your existing image library, and export library backups separately from source-code backups.
+
 ```bash
 npm ci
 ```
